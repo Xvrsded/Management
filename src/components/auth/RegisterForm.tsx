@@ -1,12 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Loader2, Mail, Lock, User, AlertCircle, CheckCircle } from 'lucide-react'
+import { Loader2, Mail, Lock, User, AlertCircle, CheckCircle, BadgeCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/services/supabase/client'
 import { useAuthStore } from '@/store/useAuthStore'
@@ -17,6 +17,7 @@ const registerSchema = z.object({
   fullName: z.string().min(1, 'Nama lengkap wajib diisi').max(100, 'Nama terlalu panjang'),
   email: z.string().min(1, 'Email wajib diisi').email('Format email tidak valid'),
   password: z.string().min(6, 'Password minimal 6 karakter'),
+  role: z.string().optional(),
 })
 
 type RegisterFormValues = z.infer<typeof registerSchema>
@@ -47,13 +48,35 @@ export default function RegisterForm() {
   const [success, setSuccess] = useState(false)
   const [loading, setLoading] = useState(false)
 
+  const [availableRoles, setAvailableRoles] = useState<string[]>(['warga'])
+  const [loadingRoles, setLoadingRoles] = useState(true)
+
+  useEffect(() => {
+    async function fetchRoles() {
+      const supabase = createClient()
+      const { data } = await supabase.from('profiles').select('role')
+      
+      const takenRoles = new Set(data?.map(p => p.role) || [])
+      const roles = ['warga']
+      
+      if (!takenRoles.has('rt')) roles.unshift('rt')
+      if (!takenRoles.has('rw')) roles.unshift('rw')
+      if (!takenRoles.has('admin')) roles.unshift('admin')
+      if (!takenRoles.has('superadmin')) roles.unshift('superadmin')
+      
+      setAvailableRoles(roles)
+      setLoadingRoles(false)
+    }
+    fetchRoles()
+  }, [])
+
   const {
     register,
     handleSubmit,
     formState: { errors },
   } = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
-    defaultValues: { fullName: '', email: '', password: '' },
+    defaultValues: { fullName: '', email: '', password: '', role: 'warga' },
   })
 
   const onSubmit = async (values: RegisterFormValues) => {
@@ -67,7 +90,7 @@ export default function RegisterForm() {
         password: values.password,
         options: {
           data: {
-            role: 'warga',
+            role: availableRoles.length > 1 ? (values.role || 'warga') : 'warga',
             full_name: values.fullName.trim(),
           },
         },
@@ -137,6 +160,32 @@ export default function RegisterForm() {
       )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="mt-5 space-y-4" noValidate>
+        {!loadingRoles && availableRoles.length > 1 && (
+          <div className="space-y-1.5">
+            <label htmlFor="reg-role" className="block text-sm font-medium text-slate-700">
+              Mendaftar Sebagai
+            </label>
+            <div className="relative">
+              <BadgeCheck
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                aria-hidden
+              />
+              <select
+                id="reg-role"
+                {...register('role')}
+                className={inputClass(!!errors.role)}
+                disabled={loading}
+              >
+                {availableRoles.map(r => (
+                  <option key={r} value={r}>
+                    {r === 'rt' || r === 'rw' ? r.toUpperCase() : r.charAt(0).toUpperCase() + r.slice(1)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+
         <div className="space-y-1.5">
           <label htmlFor="reg-name" className="block text-sm font-medium text-slate-700">
             Nama Lengkap

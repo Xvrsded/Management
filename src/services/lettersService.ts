@@ -24,7 +24,7 @@ export const lettersService = {
     try {
       const { data, error } = await supabase
         .from('citizen_profiles')
-        .select('*')
+        .select('id, nik, kk, address, rt, rw, phone, gender, date_of_birth, place_of_birth, religion, occupation, family_id, family_role')
         .eq('id', userId)
         .single()
 
@@ -453,7 +453,7 @@ export const lettersService = {
     try {
       const { data, error } = await supabase
         .from('letter_categories')
-        .select('*')
+        .select('id, name, code, description, form_fields, is_active')
         .eq('is_active', true)
         .order('name', { ascending: true })
 

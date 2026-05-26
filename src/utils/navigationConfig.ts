@@ -12,6 +12,7 @@ import {
   Settings,
   FolderOpen,
   Map,
+  MessageSquare,
   type LucideIcon
 } from 'lucide-react'
 import { NAVIGATION_DATA, type NavigationDataItem } from './navigationData'
@@ -37,7 +38,8 @@ const ICON_MAP: Record<string, LucideIcon> = {
   User,
   Settings,
   FolderOpen,
-  Map
+  Map,
+  MessageSquare
 }
 
 // Generate the runtime navigation items configuration

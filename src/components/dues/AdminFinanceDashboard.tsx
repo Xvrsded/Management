@@ -71,7 +71,7 @@ export default function AdminFinanceDashboard({ userId, role }: AdminFinanceDash
   const [customDueType, setCustomDueType] = useState('')
   const [customDueAmount, setCustomDueAmount] = useState(0)
   const [selectedTarget, setSelectedTarget] = useState('all') // 'all' or specific citizen ID
-  const [selectedRtFilter, setSelectedRtFilter] = useState('03')
+  const [selectedRtFilter, setSelectedRtFilter] = useState('all')
   const [customDeadline, setCustomDeadline] = useState('2026-05-31')
 
   // Reject Modal States
@@ -88,13 +88,14 @@ export default function AdminFinanceDashboard({ userId, role }: AdminFinanceDash
       const { data: paymentsData, error: payErr } = await supabase
         .from('due_payments')
         .select(`
-          *,
+          id, amount, status, due_date, payment_date, payment_method, proof_url, remarks, profile_id, category_id, created_at, title,
           profiles:profile_id (
             full_name,
             email
           )
         `)
         .order('created_at', { ascending: false })
+        .limit(500)
 
       if (payErr) throw payErr
       setPayments((paymentsData || []).map((item: any) => ({
@@ -105,7 +106,7 @@ export default function AdminFinanceDashboard({ userId, role }: AdminFinanceDash
       // B. Fetch Dues Categories
       const { data: catsData } = await supabase
         .from('payment_categories')
-        .select('*')
+        .select('id, name, kategori, default_amount, is_active, created_at')
         .order('created_at', { ascending: false })
       
       if (catsData) {
@@ -233,7 +234,7 @@ export default function AdminFinanceDashboard({ userId, role }: AdminFinanceDash
 
     // Filter target citizens
     const targets = selectedTarget === 'all' 
-      ? citizens.filter(c => c.rt === selectedRtFilter) 
+      ? (selectedRtFilter === 'all' ? citizens : citizens.filter(c => c.rt === selectedRtFilter))
       : citizens.filter(c => c.id === selectedTarget)
 
     if (targets.length === 0) {
@@ -258,12 +259,14 @@ export default function AdminFinanceDashboard({ userId, role }: AdminFinanceDash
         
       if (dueError || !newDue) {
         console.error('Failed to create master dues:', dueError ? JSON.stringify(dueError, null, 2) : 'No newDue returned')
+        toast.dismiss()
         toast.error('Gagal membuat data master tagihan!')
         return
       }
       masterDueId = newDue.id
     } catch (e) {
       console.error('Error creating master dues:', e)
+      toast.dismiss()
       toast.error('Terjadi kesalahan saat membuat master tagihan')
       return
     }
@@ -272,7 +275,7 @@ export default function AdminFinanceDashboard({ userId, role }: AdminFinanceDash
       profile_id: citizen.id,
       due_id: masterDueId,
       amount: customDueAmount,
-      status: 'unpaid'
+      status: 'pending'
     }))
 
     try {
@@ -282,11 +285,17 @@ export default function AdminFinanceDashboard({ userId, role }: AdminFinanceDash
 
       if (error) {
         console.error('Insert error:', error.message, error.details)
+        toast.dismiss()
+        toast.error(`Gagal membuat tagihan: ${error.message}`)
+        return
       } else {
         successCount = targets.length
       }
     } catch (err) {
       console.error('Unexpected error generating bill:', err)
+      toast.dismiss()
+      toast.error('Terjadi kesalahan tidak terduga saat membuat tagihan')
+      return
     }
 
     toast.dismiss()
@@ -764,6 +773,7 @@ export default function AdminFinanceDashboard({ userId, role }: AdminFinanceDash
                     onChange={(e) => setSelectedRtFilter(e.target.value)}
                     className="w-full p-3.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 bg-white"
                   >
+                    <option value="all">Semua RT (Seluruh Warga)</option>
                     <option value="03">RT 03 (Kebagusan)</option>
                     <option value="01">RT 01</option>
                     <option value="02">RT 02</option>

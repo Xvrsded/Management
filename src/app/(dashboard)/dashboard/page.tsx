@@ -185,7 +185,7 @@ export default async function DashboardPage() {
   try {
     let query = supabase
       .from('notifications')
-      .select('*')
+      .select('id, title, message, type, is_read, created_at, profile_id')
       .order('created_at', { ascending: false })
       .limit(5)
 
@@ -232,10 +232,10 @@ export default async function DashboardPage() {
         rumahCount = hCount
       }
 
-      // Fetch unique KK count from citizen_profiles
+      // Fetch unique KK count from citizen_profiles (Optimized: only fetch the needed column)
       const { data: cpData } = await adminSupabase
         .from('citizen_profiles')
-        .select('kk, family_id, phone, profiles(full_name)')
+        .select('kk')
       if (cpData) {
         const uniqueKK = new Set(cpData.map(item => item.kk).filter(Boolean))
         keluargaCount = uniqueKK.size > 0 ? uniqueKK.size : cpData.length
@@ -262,12 +262,16 @@ export default async function DashboardPage() {
           .from('families')
           .select('id, house_id')
 
+        const { data: cpMapData } = await adminSupabase
+          .from('citizen_profiles')
+          .select('family_id, phone, profiles(full_name)')
+
         if (houseData) {
           mapHouses = houseData.map((h: any) => {
             // Find family for this house
             const family = famData?.find((f: any) => f.house_id === h.id)
             // Find head of family from citizen_profiles
-            const head = cpData?.find((c: any) => c.family_id === family?.id)
+            const head = cpMapData?.find((c: any) => c.family_id === family?.id)
             
             // Determine fullName from the nested profile object or fallback to owner_name
             let fname = h.owner_name || 'Tidak Diketahui'

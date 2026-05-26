@@ -64,7 +64,28 @@ export default function Sidebar() {
   const { user } = useAuthStore()
 
   const userRole = user?.role || 'warga'
-  const filteredNav = NAVIGATION_ITEMS.filter((item) => item.roles.includes(userRole))
+  let filteredNav = NAVIGATION_ITEMS.filter((item) => item.roles.includes(userRole))
+
+  if (userRole === 'rw') {
+    const rwMenuMapping: Record<string, string> = {
+      '/dashboard': 'Dashboard',
+      '/forum': 'Forum Warga',
+      '/pengumuman': 'Pengumuman',
+      '/kegiatan': 'Agenda Kegiatan',
+      '/surat': 'Verifikasi Surat',
+      '/iuran': 'Rekap Keuangan RT',
+      '/laporan': 'Laporan Aduan',
+      '/warga': 'Data Pengurus RT',
+      '/profile': 'Profil Saya'
+    }
+
+    filteredNav = filteredNav
+      .filter((item) => rwMenuMapping[item.href])
+      .map((item) => ({
+        ...item,
+        label: rwMenuMapping[item.href] || item.label
+      }))
+  }
 
   const theme = ROLE_THEMES[userRole] || ROLE_THEMES.warga
 
@@ -82,7 +103,7 @@ export default function Sidebar() {
   const groups = [
     {
       title: 'Menu Utama',
-      endpoints: ['/dashboard', '/pengumuman', '/kegiatan']
+      endpoints: ['/dashboard', '/forum', '/pengumuman', '/kegiatan']
     },
     {
       title: 'Administrasi',

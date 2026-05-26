@@ -19,13 +19,13 @@ export const notificationService = {
     const supabase = createClient()
     const { data, error } = await supabase
       .from('notifications')
-      .select('*')
+      .select('id, profile_id, title, message, type, is_read, link_url, created_at')
       .eq('profile_id', profileId)
       .order('created_at', { ascending: false })
       .limit(limit)
 
     if (error) {
-      console.error('Error fetching notifications:', error)
+      console.error('Error fetching notifications details:', error.message, error.code, error.details, error.hint)
       return []
     }
     return data as Notification[]
@@ -36,7 +36,7 @@ export const notificationService = {
     const supabase = createClient()
     const { count, error } = await supabase
       .from('notifications')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
       .eq('profile_id', profileId)
       .eq('is_read', false)
 

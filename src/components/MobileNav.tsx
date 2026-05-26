@@ -59,8 +59,8 @@ export default function MobileNav() {
     window.location.href = '/login'
   }
 
-  // 5-item mobile bottom nav
-  const bottomNavEndpoints = ['/dashboard', '/surat', '/iuran', '/kegiatan', '/profile']
+  // 6-item mobile bottom nav
+  const bottomNavEndpoints = ['/dashboard', '/surat', '/iuran', '/kegiatan', '/forum', '/profile']
   
   // Custom shorter labels in Indonesian
   const bottomLabels: Record<string, string> = {
@@ -68,6 +68,7 @@ export default function MobileNav() {
     '/surat': 'Surat',
     '/iuran': 'Iuran',
     '/kegiatan': 'Kegiatan',
+    '/forum': 'Forum',
     '/profile': 'Profil'
   }
 
@@ -118,7 +119,7 @@ export default function MobileNav() {
 
       {/* Bottom Mobile Bar */}
       <nav 
-        className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-100 flex justify-around items-center pt-2 px-3 z-40 shadow-[0_-4px_16px_-4px_rgba(0,0,0,0.03)] rounded-t-2xl"
+        className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-100 grid grid-cols-6 items-center pt-2 px-1 z-40 shadow-[0_-4px_16px_-4px_rgba(0,0,0,0.03)] rounded-t-2xl"
         style={{ paddingBottom: 'calc(8px + env(safe-area-inset-bottom, 0px))' }}
       >
         {bottomNavItems.map((item) => {
@@ -130,12 +131,12 @@ export default function MobileNav() {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex flex-col items-center justify-center w-14 py-1 rounded-xl transition-all ${
+              className={`flex flex-col items-center justify-center w-full py-1 transition-all ${
                 isActive ? `${theme.activeText} font-bold` : 'text-slate-400 font-semibold'
               }`}
             >
               <Icon className={`w-5 h-5 mb-0.5 transition-transform ${isActive ? `scale-105 ${theme.activeText}` : 'text-slate-400'}`} />
-              <span className="text-[8px] tracking-wide">{item.label}</span>
+              <span className="text-[10px] tracking-wide">{item.label}</span>
             </Link>
           )
         })}

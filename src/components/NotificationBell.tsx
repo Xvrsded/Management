@@ -13,15 +13,14 @@ export default function NotificationBell() {
   const [isOpen, setIsOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
-  // Fetch notifications
-  const fetchNotifications = async () => {
+  // Fetch only unread count for background polling
+  const fetchUnreadCount = async () => {
     if (!user?.id) return
-    const count = await notificationService.getUnreadCount(user.id)
-    setUnreadCount(count)
-
-    if (isOpen) {
-      const notifs = await notificationService.getMyNotifications(user.id)
-      setNotifications(notifs)
+    try {
+      const count = await notificationService.getUnreadCount(user.id)
+      setUnreadCount(count)
+    } catch (e) {
+      console.error('Failed to fetch unread count', e)
     }
   }
 
@@ -29,17 +28,17 @@ export default function NotificationBell() {
   useEffect(() => {
     if (!user?.id) return
 
-    fetchNotifications() // initial fetch
+    fetchUnreadCount() // initial fetch
 
     const intervalId = setInterval(() => {
       // Only fetch if tab is active/visible
       if (document.visibilityState === 'visible') {
-        fetchNotifications()
+        fetchUnreadCount()
       }
     }, 60000) // 60 seconds
 
     return () => clearInterval(intervalId)
-  }, [user?.id, isOpen])
+  }, [user?.id])
 
   // Handle click outside to close dropdown
   useEffect(() => {
@@ -55,11 +54,17 @@ export default function NotificationBell() {
   }, [isOpen])
 
   const toggleDropdown = async () => {
-    if (!isOpen && user?.id) {
-      const notifs = await notificationService.getMyNotifications(user.id)
-      setNotifications(notifs)
+    const nextIsOpen = !isOpen
+    setIsOpen(nextIsOpen)
+    
+    if (nextIsOpen && user?.id) {
+      try {
+        const notifs = await notificationService.getMyNotifications(user.id)
+        setNotifications(notifs)
+      } catch (e) {
+        console.error('Failed to fetch notifications list', e)
+      }
     }
-    setIsOpen(!isOpen)
   }
 
   const handleMarkAsRead = async (id?: string) => {

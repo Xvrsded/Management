@@ -24,6 +24,7 @@ import {
   AlertOctagon
 } from 'lucide-react'
 import DuesSummaryWidget, { DuePayment } from '../DuesSummaryWidget'
+import QuickActions from '../QuickActions'
 import ShortcutGrid from '../ShortcutGrid'
 import AnnouncementsWidget, { Announcement } from '../AnnouncementsWidget'
 import RightInfoPanel, { NotificationItem } from '../RightInfoPanel'
@@ -108,6 +109,8 @@ export default function WargaDashboard({
           </Link>
         </div>
       </div>
+
+      <QuickActions role="warga" />
 
       {/* Main Grid: Responsive desktop columns, stacking on mobile */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

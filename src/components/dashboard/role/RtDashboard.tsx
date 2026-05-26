@@ -1,24 +1,23 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { 
   Users, 
-  Home, 
-  FolderOpen, 
-  AlertTriangle, 
-  CheckCircle2, 
+  Wallet, 
+  AlertOctagon, 
+  BellRing, 
   FileText, 
-  PlusCircle, 
-  Calendar, 
-  UserCheck, 
-  ShieldAlert, 
-  ChevronRight, 
-  Settings 
+  CheckCircle2, 
+  UserPlus, 
+  Activity,
+  Loader2
 } from 'lucide-react'
-import DuesSummaryWidget, { DuePayment } from '../DuesSummaryWidget'
-import AnnouncementsWidget, { Announcement } from '../AnnouncementsWidget'
-import RightInfoPanel, { NotificationItem } from '../RightInfoPanel'
-import ShortcutGrid from '../ShortcutGrid'
+import { Announcement } from '../AnnouncementsWidget'
+import { NotificationItem } from '../RightInfoPanel'
+import { DuePayment } from '../DuesSummaryWidget'
+import QuickActions from '../QuickActions'
+import { createClient } from '@/services/supabase/client'
 
 interface RtDashboardProps {
   fullName: string
@@ -29,249 +28,276 @@ interface RtDashboardProps {
   regionalCount: number
   announcements: Announcement[]
   notifications: NotificationItem[]
-  dues: DuePayment[] // staff view or fallback
+  dues: DuePayment[]
 }
 
 export default function RtDashboard({
   fullName,
-  wargaCount,
-  rumahCount,
-  keluargaCount,
+  wargaCount: initialWargaCount,
   totalRegionalDues,
-  regionalCount,
-  announcements,
-  notifications,
-  dues
 }: RtDashboardProps) {
 
-  // Mock pending actions count for RT dashboard
-  const pendingLettersCount = 3
-  const pendingDuesVerification = regionalCount
+  const [loading, setLoading] = useState(true)
+  const [data, setData] = useState({
+    wargaCount: initialWargaCount,
+    kasBulanIni: totalRegionalDues || 0,
+    wargaMenunggak: 0,
+    perluTindakan: 0,
+    suratMenunggu: [] as any[],
+    iuranMenunggu: [] as any[]
+  })
+
+  useEffect(() => {
+    async function fetchRealtimeData() {
+      const supabase = createClient()
+      try {
+        const { data: sessionData } = await supabase.auth.getSession()
+        if (!sessionData.session?.user) return
+        const userId = sessionData.session.user.id
+
+        // Get RT info for this user
+        const { data: citizenProfile } = await supabase.from('citizen_profiles').select('rt').eq('id', userId).maybeSingle()
+        const myRt = citizenProfile?.rt || '01' // fallback
+
+        // Parallel Fetch
+        const [wargaRes, lettersRes, duesRes, unpaidDuesRes, reportsRes] = await Promise.all([
+          supabase.from('citizen_profiles').select('id, profiles(full_name)').eq('rt', myRt),
+          supabase.from('letter_requests').select('id, letter_type, status, created_at, profiles(full_name)').eq('status', 'pending_rt').order('created_at', { ascending: false }).limit(3),
+          supabase.from('due_payments').select('id, amount, status, created_at, profiles(full_name)').eq('status', 'pending_verification').order('created_at', { ascending: false }).limit(3),
+          supabase.from('due_payments').select('id, profile_id').eq('status', 'unpaid'),
+          supabase.from('reports').select('id').in('status', ['submitted', 'reviewing'])
+        ])
+
+        const warga = wargaRes.data || []
+        const letters = lettersRes.data || []
+        const duesVerification = duesRes.data || []
+        const unpaidDues = unpaidDuesRes.data || []
+        const reports = reportsRes.data || []
+
+        // Calculate unique KK/Profiles with unpaid dues
+        const menunggakSet = new Set(unpaidDues.map(d => d.profile_id))
+        
+        // Format lists
+        const formatTimeAgo = (dateString: string) => {
+          const date = new Date(dateString)
+          const diff = Math.floor((new Date().getTime() - date.getTime()) / 1000)
+          if (diff < 60) return 'Baru saja'
+          if (diff < 3600) return `${Math.floor(diff / 60)} mnt lalu`
+          if (diff < 86400) return `${Math.floor(diff / 3600)} jam lalu`
+          return `${Math.floor(diff / 86400)} hr lalu`
+        }
+
+        const suratList = letters.map(l => ({
+          id: l.id,
+          nama: (l.profiles as any)?.full_name || 'Warga',
+          jenis: l.letter_type,
+          waktu: formatTimeAgo(l.created_at)
+        }))
+
+        const iuranList = duesVerification.map(d => ({
+          id: d.id,
+          nama: (d.profiles as any)?.full_name || 'Warga',
+          nominal: d.amount,
+          waktu: formatTimeAgo(d.created_at)
+        }))
+
+        setData({
+          wargaCount: warga.length > 0 ? warga.length : initialWargaCount,
+          kasBulanIni: totalRegionalDues || 0, // In reality, this requires summing 'paid' dues for this month
+          wargaMenunggak: menunggakSet.size,
+          perluTindakan: letters.length + duesVerification.length + reports.length,
+          suratMenunggu: suratList,
+          iuranMenunggu: iuranList
+        })
+
+      } catch (err) {
+        console.warn('Failed to fetch RT dashboard data:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchRealtimeData()
+  }, [initialWargaCount, totalRegionalDues])
+
+  const formatRupiah = (num: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(num)
 
   return (
-    <div className="space-y-6 pb-20 select-none">
-      {/* 1. Top Greeting Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-2 bg-transparent">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight leading-none">
-            Selamat Datang, <span className="text-emerald-600 font-black">{fullName}</span> 👋
-          </h1>
-          <p className="text-xs font-semibold text-slate-450 mt-1.5">
-            Konsol Pengurus RT 03 / RW 05 • Emerald Theme
-          </p>
-        </div>
-
-        <div className="flex items-center space-x-2 shrink-0">
-          <Link 
-            href="/settings"
-            className="flex items-center space-x-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-100 rounded-xl shadow-xs transition-all hover:scale-105 active:scale-95 text-xs font-bold text-slate-700"
-          >
-            <Settings className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>Pengaturan</span>
-          </Link>
-        </div>
-      </div>
-
-      {/* Grid structure */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div className="bg-slate-50 min-h-screen p-4 sm:p-6 lg:p-8 -m-4 sm:-m-6 lg:-m-8 rounded-none sm:rounded-tl-3xl transition-all">
+      <div className="max-w-7xl mx-auto space-y-8 select-none pb-20">
         
-        {/* Left/Middle Column (Flexible main feed) */}
-        <div className="lg:col-span-2 space-y-6">
-          
-          {/* A. Aggregate Regional Outstanding Dues */}
-          <DuesSummaryWidget 
-            role="rt" 
-            totalRegionalDues={totalRegionalDues} 
-            regionalCount={regionalCount} 
-          />
-
-          {/* B. Pending Approvals Grid Alerts */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            
-            {/* Letter Approvals */}
-            <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-100 rounded-3xl p-5 flex flex-col justify-between h-40 relative overflow-hidden group">
-              <div className="absolute right-4 -bottom-4 text-amber-500/10 pointer-events-none transform group-hover:scale-110 transition-transform duration-500">
-                <FileText className="w-24 h-24" />
-              </div>
-              <div className="space-y-1.5">
-                <span className="px-2 py-0.5 text-[8px] font-extrabold uppercase rounded-full bg-amber-100 text-amber-700 border border-amber-200 tracking-wider">
-                  Menunggu Persetujuan
-                </span>
-                <h3 className="text-base font-black text-slate-800 mt-2">Persetujuan Surat Pengantar</h3>
-                <p className="text-[10px] text-slate-450 font-semibold leading-relaxed">
-                  Terdapat {pendingLettersCount} surat pengantar diajukan warga yang butuh ttd digital Anda.
-                </p>
-              </div>
-              <Link 
-                href="/surat"
-                className="mt-3 inline-flex items-center text-xs font-bold text-amber-700 hover:text-amber-800 hover:translate-x-0.5 transition-all"
-              >
-                Proses Surat &rarr;
-              </Link>
-            </div>
-
-            {/* Dues Verifications */}
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-3xl p-5 flex flex-col justify-between h-40 relative overflow-hidden group">
-              <div className="absolute right-4 -bottom-4 text-blue-500/10 pointer-events-none transform group-hover:scale-110 transition-transform duration-500">
-                <CheckCircle2 className="w-24 h-24" />
-              </div>
-              <div className="space-y-1.5">
-                <span className="px-2 py-0.5 text-[8px] font-extrabold uppercase rounded-full bg-blue-100 text-blue-700 border border-blue-200 tracking-wider">
-                  Verifikasi Pembayaran
-                </span>
-                <h3 className="text-base font-black text-slate-800 mt-2">Konfirmasi Kas Iuran</h3>
-                <p className="text-[10px] text-slate-450 font-semibold leading-relaxed">
-                  Terdapat {pendingDuesVerification} konfirmasi transfer iuran bulanan dari warga wilayah RT.
-                </p>
-              </div>
-              <Link 
-                href="/iuran"
-                className="mt-3 inline-flex items-center text-xs font-bold text-blue-700 hover:text-blue-800 hover:translate-x-0.5 transition-all"
-              >
-                Verifikasi &rarr;
-              </Link>
-            </div>
-
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-black text-slate-800 tracking-tight leading-tight flex items-center gap-2">
+              <Activity className="w-7 h-7 text-purple-600" />
+              Konsol Operasional <span className="text-purple-600">RT</span>
+            </h1>
+            <p className="text-sm font-medium text-slate-500 mt-1 flex items-center gap-1.5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+              Sistem siap. Selamat bertugas, Bapak/Ibu {fullName}.
+            </p>
           </div>
-
-          {/* C. Service Shortcuts */}
-          <ShortcutGrid role="rt" />
-
-          {/* D. Warga Terbaru Register list */}
-          <div className="bg-white rounded-3xl border border-slate-100/80 shadow-xs p-5 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-50 pb-3">
-              <div className="flex items-center space-x-2">
-                <Users className="w-4 h-4 text-emerald-600 shrink-0" />
-                <h4 className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest leading-none">
-                  Anggota Warga Terdaftar Terbaru
-                </h4>
-              </div>
-              <Link href="/warga" className="text-[10px] font-extrabold text-emerald-600 hover:text-emerald-700 uppercase tracking-wider">
-                Kelola Semua &rarr;
-              </Link>
-            </div>
-
-            <div className="divide-y divide-slate-50 space-y-3">
-              <div className="flex items-center justify-between pt-3 first:pt-0">
-                <div className="flex items-center space-x-3.5 min-w-0">
-                  <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-xs shrink-0 border border-emerald-100/50">
-                    A
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-slate-800 leading-tight">Ahmad Subardjo</p>
-                    <p className="text-[9px] font-semibold text-slate-400 mt-1 leading-none font-mono">NIK: 327608120584****</p>
-                  </div>
-                </div>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[8px] font-extrabold tracking-wide uppercase bg-emerald-50 text-emerald-600 border border-emerald-100 leading-none">
-                  <UserCheck className="w-2.5 h-2.5 mr-0.5" /> Aktif
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between pt-3">
-                <div className="flex items-center space-x-3.5 min-w-0">
-                  <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-xs shrink-0 border border-emerald-100/50">
-                    N
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-slate-800 leading-tight">Nurul Hidayah</p>
-                    <p className="text-[9px] font-semibold text-slate-400 mt-1 leading-none font-mono">NIK: 327609240892****</p>
-                  </div>
-                </div>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[8px] font-extrabold tracking-wide uppercase bg-emerald-50 text-emerald-600 border border-emerald-100 leading-none">
-                  <UserCheck className="w-2.5 h-2.5 mr-0.5" /> Aktif
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* E. Announcements Feed */}
-          <AnnouncementsWidget announcements={announcements} />
         </div>
 
-        {/* Right Info Column */}
-        <div className="space-y-6">
-          
-          {/* A. Statistics Widgets (RT counts) */}
-          <div className="bg-gradient-to-br from-emerald-600 to-teal-700 text-white rounded-2xl p-5 shadow-md shadow-emerald-600/15 relative overflow-hidden shrink-0">
-            <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-xl pointer-events-none" />
-            
-            <h4 className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-100 mb-4">
-              Statistik Kependudukan RT
-            </h4>
-
-            <div className="space-y-4 relative z-10">
-              {/* Total Warga */}
-              <div className="flex items-center space-x-3.5">
-                <div className="w-9 h-9 rounded-xl bg-white/15 text-white flex items-center justify-center shrink-0 border border-white/5 shadow-inner">
-                  <Users className="w-4.5 h-4.5" />
-                </div>
-                <div>
-                  <p className="text-[9px] font-bold text-emerald-100 uppercase tracking-wide leading-none">Warga Terdaftar</p>
-                  <h5 className="text-sm font-extrabold leading-none mt-1.5">{wargaCount} Jiwa</h5>
-                </div>
-              </div>
-
-              {/* Rumah Terdaftar */}
-              <div className="flex items-center space-x-3.5">
-                <div className="w-9 h-9 rounded-xl bg-white/15 text-white flex items-center justify-center shrink-0 border border-white/5 shadow-inner">
-                  <Home className="w-4.5 h-4.5" />
-                </div>
-                <div>
-                  <p className="text-[9px] font-bold text-emerald-100 uppercase tracking-wide leading-none">Rumah Terdaftar</p>
-                  <h5 className="text-sm font-extrabold leading-none mt-1.5">{rumahCount} Unit</h5>
-                </div>
-              </div>
-
-              {/* Jumlah Keluarga */}
-              <div className="flex items-center space-x-3.5">
-                <div className="w-9 h-9 rounded-xl bg-white/15 text-white flex items-center justify-center shrink-0 border border-white/5 shadow-inner">
-                  <FolderOpen className="w-4.5 h-4.5" />
-                </div>
-                <div>
-                  <p className="text-[9px] font-bold text-emerald-100 uppercase tracking-wide leading-none">Jumlah Keluarga (KK)</p>
-                  <h5 className="text-sm font-extrabold leading-none mt-1.5">{keluargaCount} KK</h5>
-                </div>
-              </div>
-            </div>
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+            <Loader2 className="w-8 h-8 animate-spin mb-4 text-purple-600" />
+            <p className="text-sm font-medium">Memuat data operasional realtime...</p>
           </div>
+        ) : (
+          <>
+            {/* 0. Quick Actions (Aksi Cepat) */}
+            <QuickActions role="rt" />
 
-          {/* B. Administrative Quick Tools Actions */}
-          <div className="bg-white rounded-3xl border border-slate-100 shadow-xs p-5 space-y-4">
-            <div className="flex items-center space-x-2">
-              <ShieldAlert className="w-4 h-4 text-emerald-600 shrink-0" />
-              <h4 className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest leading-none">
-                Peralatan Kilat Pengurus
-              </h4>
+            {/* 1. Statistik Operasional (Grid 4 Kolom) */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+              
+              <div className="bg-white rounded-xl md:rounded-2xl p-4 md:p-5 shadow-sm shadow-purple-100/40 border border-purple-50 flex flex-col justify-between transition-transform hover:-translate-y-1">
+                <div className="flex items-center justify-between">
+                  <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                    <Users className="w-4 h-4 md:w-5 md:h-5" />
+                  </div>
+                </div>
+                <div className="mt-3 md:mt-4">
+                  <h3 className="text-2xl md:text-3xl font-black text-slate-800">{data.wargaCount}</h3>
+                  <p className="text-[9px] md:text-xs font-semibold text-slate-500 mt-1 uppercase tracking-wider md:tracking-wide">Total Warga RT</p>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl md:rounded-2xl p-4 md:p-5 shadow-sm shadow-purple-100/40 border border-purple-50 flex flex-col justify-between transition-transform hover:-translate-y-1">
+                <div className="flex items-center justify-between">
+                  <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                    <Wallet className="w-4 h-4 md:w-5 md:h-5" />
+                  </div>
+                </div>
+                <div className="mt-3 md:mt-4">
+                  <h3 className="text-lg md:text-xl font-black text-slate-800 truncate">{formatRupiah(data.kasBulanIni)}</h3>
+                  <p className="text-[9px] md:text-xs font-semibold text-slate-500 mt-1 uppercase tracking-wider md:tracking-wide">Tagihan Aktif</p>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl md:rounded-2xl p-4 md:p-5 shadow-sm shadow-purple-100/40 border border-purple-50 flex flex-col justify-between transition-transform hover:-translate-y-1">
+                <div className="flex items-center justify-between">
+                  <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
+                    <AlertOctagon className="w-4 h-4 md:w-5 md:h-5" />
+                  </div>
+                </div>
+                <div className="mt-3 md:mt-4">
+                  <h3 className="text-2xl md:text-3xl font-black text-slate-800">{data.wargaMenunggak} <span className="text-sm text-slate-500 font-bold">KK</span></h3>
+                  <p className="text-[9px] md:text-xs font-semibold text-slate-500 mt-1 uppercase tracking-wider md:tracking-wide">Warga Menunggak</p>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl md:rounded-2xl p-4 md:p-5 shadow-sm shadow-purple-100/40 border border-purple-50 flex flex-col justify-between transition-transform hover:-translate-y-1">
+                <div className="flex items-center justify-between">
+                  <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                    <BellRing className="w-4 h-4 md:w-5 md:h-5" />
+                  </div>
+                  {data.perluTindakan > 0 && (
+                    <span className="text-[10px] md:text-xs font-bold text-white bg-rose-500 px-2 py-0.5 md:py-1 rounded-full animate-pulse shadow-sm shadow-rose-200">
+                      Segera
+                    </span>
+                  )}
+                </div>
+                <div className="mt-3 md:mt-4">
+                  <h3 className="text-2xl md:text-3xl font-black text-rose-600">{data.perluTindakan}</h3>
+                  <p className="text-[9px] md:text-xs font-semibold text-slate-500 mt-1 uppercase tracking-wider md:tracking-wide">Perlu Tindakan</p>
+                </div>
+              </div>
+
             </div>
 
-            <div className="grid grid-cols-2 gap-3.5">
-              <Link 
-                href="/pengumuman"
-                className="flex flex-col items-center justify-center p-4 bg-slate-50/50 hover:bg-emerald-50 border border-slate-100 hover:border-emerald-200 rounded-2xl transition-colors text-center group"
-              >
-                <PlusCircle className="w-5 h-5 text-emerald-600 group-hover:scale-110 transition-transform mb-1.5" />
-                <span className="text-[10px] font-bold text-slate-700 group-hover:text-emerald-950">Buat Info Baru</span>
-              </Link>
+            {/* 2. Aksi Cepat */}
+            <div>
+              <h2 className="text-sm font-semibold text-slate-500 mb-3">Jalan Pintas</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
+                <Link href="/surat" className="flex items-center gap-3 bg-white p-4 rounded-xl border border-purple-50 shadow-sm shadow-purple-100/40 hover:shadow-md hover:border-purple-200 transition-all group">
+                  <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-colors shrink-0">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <span className="text-sm font-bold text-slate-700 group-hover:text-purple-700 transition-colors">Verifikasi Surat</span>
+                </Link>
 
-              <Link 
-                href="/kegiatan"
-                className="flex flex-col items-center justify-center p-4 bg-slate-50/50 hover:bg-teal-50 border border-slate-100 hover:border-teal-200 rounded-2xl transition-colors text-center group"
-              >
-                <Calendar className="w-5 h-5 text-teal-600 group-hover:scale-110 transition-transform mb-1.5" />
-                <span className="text-[10px] font-bold text-slate-700 group-hover:text-teal-950">Jadwal Agenda</span>
-              </Link>
+                <Link href="/iuran" className="flex items-center gap-3 bg-white p-4 rounded-xl border border-purple-50 shadow-sm shadow-purple-100/40 hover:shadow-md hover:border-purple-200 transition-all group">
+                  <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-colors shrink-0">
+                    <CheckCircle2 className="w-5 h-5" />
+                  </div>
+                  <span className="text-sm font-bold text-slate-700 group-hover:text-purple-700 transition-colors">Verifikasi Iuran</span>
+                </Link>
+
+                <Link href="/warga" className="flex items-center gap-3 bg-white p-4 rounded-xl border border-purple-50 shadow-sm shadow-purple-100/40 hover:shadow-md hover:border-purple-200 transition-all group">
+                  <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-colors shrink-0">
+                    <UserPlus className="w-5 h-5" />
+                  </div>
+                  <span className="text-sm font-bold text-slate-700 group-hover:text-purple-700 transition-colors">Tambah Data Warga</span>
+                </Link>
+              </div>
             </div>
-          </div>
 
-          {/* C. Right notifications timeline feed */}
-          <RightInfoPanel 
-            role="rt"
-            wargaCount={wargaCount}
-            rumahCount={rumahCount}
-            keluargaCount={keluargaCount}
-            notifications={notifications}
-          />
-        </div>
+            {/* 3. Panel Antrean Tugas */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              
+              {/* Kolom Kiri: Surat Menunggu Persetujuan */}
+              <div className="bg-white rounded-2xl p-6 shadow-sm shadow-purple-100/40 border border-purple-50 flex flex-col">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-purple-600" /> Surat Menunggu Persetujuan
+                  </h2>
+                </div>
+                
+                <div className="flex-1 space-y-3">
+                  {data.suratMenunggu.length > 0 ? data.suratMenunggu.map((surat) => (
+                    <div key={surat.id} className="flex items-center justify-between p-3.5 bg-slate-50/80 rounded-xl border border-slate-100 hover:border-purple-100 transition-colors">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-bold text-slate-800">{surat.nama}</span>
+                        <span className="text-xs font-medium text-slate-500 mt-0.5">{surat.jenis} • <span className="text-amber-600">{surat.waktu}</span></span>
+                      </div>
+                      <Link href="/surat" className="px-3 py-1.5 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors shadow-sm shadow-purple-200">
+                        Cek
+                      </Link>
+                    </div>
+                  )) : (
+                    <div className="text-center py-6 text-slate-400 text-sm font-medium border border-dashed border-slate-200 rounded-xl">
+                      Tidak ada antrean surat.
+                    </div>
+                  )}
+                </div>
+                <Link href="/surat" className="mt-5 text-center text-xs font-bold text-purple-600 hover:text-purple-700 transition-colors">Lihat Semua Surat &rarr;</Link>
+              </div>
+
+              {/* Kolom Kanan: Iuran Menunggu Verifikasi */}
+              <div className="bg-white rounded-2xl p-6 shadow-sm shadow-purple-100/40 border border-purple-50 flex flex-col">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                    <Wallet className="w-5 h-5 text-purple-600" /> Iuran Menunggu Verifikasi
+                  </h2>
+                </div>
+                
+                <div className="flex-1 space-y-3">
+                  {data.iuranMenunggu.length > 0 ? data.iuranMenunggu.map((iuran) => (
+                    <div key={iuran.id} className="flex items-center justify-between p-3.5 bg-slate-50/80 rounded-xl border border-slate-100 hover:border-purple-100 transition-colors">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-bold text-slate-800">{iuran.nama}</span>
+                        <span className="text-xs font-medium text-slate-500 mt-0.5">{formatRupiah(iuran.nominal)} • <span className="text-blue-600">{iuran.waktu}</span></span>
+                      </div>
+                      <Link href="/iuran" className="px-3 py-1.5 text-xs font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors">
+                        Cek Bukti
+                      </Link>
+                    </div>
+                  )) : (
+                    <div className="text-center py-6 text-slate-400 text-sm font-medium border border-dashed border-slate-200 rounded-xl">
+                      Tidak ada antrean iuran.
+                    </div>
+                  )}
+                </div>
+                <Link href="/iuran" className="mt-5 text-center text-xs font-bold text-purple-600 hover:text-purple-700 transition-colors">Rekap Kas RT &rarr;</Link>
+              </div>
+
+            </div>
+          </>
+        )}
+
       </div>
     </div>
   )

@@ -10,6 +10,7 @@ export interface NavigationDataItem {
 
 export const NAVIGATION_DATA: NavigationDataItem[] = [
   { href: '/dashboard', label: 'Dashboard', iconName: 'LayoutDashboard', roles: ['warga', 'rt', 'rw', 'admin', 'superadmin'] },
+  { href: '/forum', label: 'Forum Warga', iconName: 'MessageSquare', roles: ['warga', 'rt', 'rw', 'admin', 'superadmin'] },
   { href: '/iuran', label: 'Iuran Bulanan', iconName: 'CreditCard', roles: ['warga', 'rt', 'rw', 'admin', 'superadmin'] },
   { href: '/surat', label: 'Surat Pengantar', iconName: 'FileText', roles: ['warga', 'rt', 'rw', 'admin', 'superadmin'] },
   { href: '/pengumuman', label: 'Pengumuman', iconName: 'Megaphone', roles: ['warga', 'rt', 'rw', 'admin', 'superadmin'] },

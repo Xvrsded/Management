@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import RightInfoPanel, { NotificationItem } from '../RightInfoPanel'
+import QuickActions from '../QuickActions'
 
 interface SuperadminDashboardProps {
   fullName: string
@@ -90,6 +91,9 @@ export default function SuperadminDashboard({
         {/* Left Columns (Feeds) */}
         <div className="lg:col-span-2 space-y-6">
           
+          {/* 0. Quick Actions (Aksi Cepat) */}
+          <QuickActions role="superadmin" />
+
           {/* A. System Health Meters (CSS Animated) */}
           <div className="bg-white rounded-3xl border border-slate-100 p-5 space-y-4 shadow-xs">
             <div className="flex items-center space-x-2 border-b border-slate-50 pb-3">

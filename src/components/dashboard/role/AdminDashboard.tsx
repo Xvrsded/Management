@@ -20,6 +20,7 @@ import { toast } from 'sonner'
 import RightInfoPanel, { NotificationItem } from '../RightInfoPanel'
 import dynamic from 'next/dynamic'
 import { MapPin } from 'lucide-react'
+import QuickActions from '../QuickActions'
 import type { MapHouse } from './AdminMapWidget'
 
 // Dynamically import map widget to disable SSR since react-leaflet requires window
@@ -67,12 +68,7 @@ export default function AdminDashboard({
 }: AdminDashboardProps) {
   const [users, setUsers] = useState<ProfileItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [systemLogs, setSystemLogs] = useState<{ id: string; action: string; time: string; user: string }[]>([
-    { id: '1', action: 'Update profil kependudukan warga', time: '10 mnt lalu', user: 'rt' },
-    { id: '2', action: 'Upload bukti iuran bulanan', time: '23 mnt lalu', user: 'warga' },
-    { id: '3', action: 'Membuat agenda kerja bakti baru', time: '1 jam lalu', user: 'rt' },
-    { id: '4', action: 'Login berhasil ke panel', time: '2 jam lalu', user: 'admin' }
-  ])
+  const [systemLogs, setSystemLogs] = useState<{ id: string; action: string; time: string; user: string }[]>([])
 
   const supabase = createClient()
 
@@ -108,8 +104,40 @@ export default function AdminDashboard({
     }
   }
 
+  const fetchLogs = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('activity_logs')
+        .select('id, action, created_at, profiles(role)')
+        .order('created_at', { ascending: false })
+        .limit(5)
+
+      if (error) throw error
+      if (data) {
+        const formatTimeAgo = (dateString: string) => {
+          const date = new Date(dateString)
+          const diff = Math.floor((new Date().getTime() - date.getTime()) / 1000)
+          if (diff < 60) return 'Baru saja'
+          if (diff < 3600) return `${Math.floor(diff / 60)} mnt lalu`
+          if (diff < 86400) return `${Math.floor(diff / 3600)} jam lalu`
+          return `${Math.floor(diff / 86400)} hr lalu`
+        }
+
+        setSystemLogs(data.map((item: any) => ({
+          id: item.id,
+          action: item.action,
+          time: formatTimeAgo(item.created_at),
+          user: item.profiles?.role || 'system'
+        })))
+      }
+    } catch (err) {
+      console.warn('Failed to load system logs:', err)
+    }
+  }
+
   useEffect(() => {
     fetchUsers()
+    fetchLogs()
   }, [])
 
   const handleUpdateRole = async (userId: string, currentRole: string) => {
@@ -146,7 +174,7 @@ export default function AdminDashboard({
         </div>
 
         <button 
-          onClick={fetchUsers}
+          onClick={() => { fetchUsers(); fetchLogs(); }}
           className="flex items-center space-x-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-100 rounded-xl shadow-xs transition-all hover:scale-105 active:scale-95 text-xs font-bold text-slate-700 shrink-0"
         >
           <RefreshCw className="w-4 h-4 text-cyan-600 shrink-0" />
@@ -196,7 +224,10 @@ export default function AdminDashboard({
 
           </div>
 
-          {/* Action Required Alert Cards */}
+          {/* 0. Quick Actions (Aksi Cepat) */}
+          <QuickActions role="admin" />
+
+          {/* 1. Kinerja Sistem Utama (Grid 4 Kolom) */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Link href="/surat" className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-100 p-4 rounded-2xl transition-all hover:scale-105 active:scale-95 group">
               <div className="flex items-center justify-between mb-2">
